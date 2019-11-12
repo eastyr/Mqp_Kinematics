@@ -1,9 +1,10 @@
+#!/usr/bin/env python3
 import matplotlib.pyplot as plt
 from math import pi, sqrt, atan2
 from sympy import Matrix, symarray, sin, cos, eye, Expr, pprint, init_printing
 import random
 import time
-from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import Axes3D  # noqa  # Ignore complaints about Axes3D not being used
 init_printing()  # doctest: +SKIP
 
 
@@ -70,13 +71,14 @@ class Joint:
 
 
 class Armature:
+
     def __init__(self):
         self.link_list = []
         self.transform_list = []
         self.theta_list = []
         self.sym_theta_list = []
         self.paired_theta = []
-        self.desiredxyzijk = Matrix([375, 175, 174, pi/2, 0, 0])
+        self.desiredxyzijk = Matrix([375, 175, 174, pi / 2, 0, 0])
         self.convergence_time = 0
         self.start_time = time.perf_counter()
         self.damping_coefficient = 0
@@ -237,11 +239,11 @@ arm.add_link((sym_theta_list[3], -pi / 2, 100, 0))
 arm.add_link((sym_theta_list[4], -pi / 2, 100, 0))
 arm.add_link((sym_theta_list[5], pi / 2, 100, 0))
 arm.add_link((sym_theta_list[6], 0, 100, 0))
-arm.add_link((pi/2, pi/2, 0, 0))
-arm.add_link((sym_theta_list[7], pi/2, 0, 0))
+arm.add_link((pi / 2, pi / 2, 0, 0))
+arm.add_link((sym_theta_list[7], pi / 2, 0, 0))
 
 arm.main_update()
-#arm.plot_arm()
+# arm.plot_arm()
 xs = []
 ys = []
 zs = []
@@ -250,8 +252,8 @@ for i in range(100, 2205):
         x = 175 + random.randrange(0, 20, 1)
         y = 175 + random.randrange(0, 20, 1)
         z = 174 + random.randrange(0, 20, 1)
-        x_rot = pi/4
-        y_rot = pi/4
+        x_rot = pi / 4
+        y_rot = pi / 4
         z_rot = 0
         arm.run_kinematics(i, x, y, z, x_rot, y_rot, z_rot)
         runtime = arm.convergence_time
