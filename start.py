@@ -4,6 +4,7 @@ from math import pi, sqrt, atan2
 from sympy import Matrix, symarray, sin, cos, eye, Expr, pprint, init_printing
 import random
 import time
+import numpy as np
 from mpl_toolkits.mplot3d import Axes3D  # noqa  # Ignore complaints about Axes3D not being used
 init_printing()  # doctest: +SKIP
 
@@ -62,7 +63,7 @@ class Joint:
         return transform
 
     def solve_transform(self, theta_subs):
-        transform_to_me = self.transform_to_me.subs(theta_subs)
+        transform_to_me = self.transform_to_me.xreplace(theta_subs)
         x_coord = transform_to_me[0, 3]
         y_coord = transform_to_me[1, 3]
         z_coord = transform_to_me[2, 3]
@@ -114,12 +115,11 @@ class Armature:
     # create a list of pairs of symbolic thetas and real thetas for substitution
     # match theta_1 to its real number
     def update_theta_list(self):
-        self.paired_theta = []
+        self.paired_theta = {}
         self.theta_list = []
         for pair_i in range(0, len(self.link_list)):
             self.theta_list.append(self.link_list[pair_i].theta)
-            pairing = (self.sym_theta_list[pair_i], self.link_list[pair_i].theta)
-            self.paired_theta.append(pairing)
+            self.paired_theta[self.sym_theta_list[pair_i]] = self.link_list[pair_i].theta
     # plot the arm in 3d space
 
     def plot_arm(self):
@@ -160,37 +160,41 @@ class Armature:
         self.forward_kinematics()
         self.update_theta_list()
         error_with_pose = self.desiredxyzijk - self.transform_list[-1].solve_transform(self.paired_theta)
-        print(error_with_pose)
-        error = Matrix(error_with_pose[0:3])
+        error_norm = error_with_pose.norm()
+        full_norm = self.desiredxyzijk.norm()
 
-        if (time.perf_counter() - self.start_time) > 100:
-            self.convergence_time = 10
+        for i in range(3, 6):
+            if error_with_pose[i] > pi:
+                error_with_pose[i] = 2*pi - error_with_pose[i]
+        if error_with_pose.norm() < 1:
+            self.damping_coefficient *= 1.5
+        if error_with_pose.norm() < .2:
             return 0
+       # self.damping_coefficient = min(1000, int(self.damping_coefficient * full_norm/(error_norm+5)))
+        print(error_with_pose)
+        print(error_with_pose.norm())
+        error_with_pose = np.array(error_with_pose).astype(np.float64)
+
         transform_matrix = self.transform_list[-1].transform_to_me[0:3, 3]
-        # pprint(Matrix(self.z_jacob))
         jacobian = transform_matrix.jacobian(self.sym_theta_list)
-        # XYZ ONLY
-        if orientation == 0:
-            if error.norm() < 1:
-                self.convergence_time = time.perf_counter() - self.start_time
-                return 0
-            # for i in range(0,3):
-            #     jacobian = jacobian.row_insert(1, self.z_jacob[i, :])
-            jacobian = jacobian.subs(self.paired_theta)
-            jacobian_transpose = jacobian.transpose()
-            delta_theta = jacobian_transpose * (
-                (jacobian * jacobian_transpose + (self.damping_coefficient ** 2) * eye(3)).inv()) * error
-        # XYZIJK ORIENTATION INCLUDED
-        else:
-            if error_with_pose.norm() < 1:
-                self.convergence_time = time.perf_counter() - self.start_time
-                return 0
-            for jac_i in range(0, 3):
-                jacobian = jacobian.row_insert(1, self.z_jacob[jac_i, :])
-            jacobian = jacobian.subs(self.paired_theta)
-            jacobian_transpose = jacobian.transpose()
-            delta_theta = jacobian_transpose * (
-                (jacobian * jacobian_transpose + (self.damping_coefficient ** 2) * eye(6)).inv()) * error_with_pose
+        for jac_i in range(0, 3):
+            jacobian = jacobian.row_insert(10, self.z_jacob[jac_i, :])
+
+        jacobian = jacobian.xreplace(self.paired_theta)
+        jacobian = np.array(jacobian).astype(np.float64)
+        jacobian_transpose = jacobian.transpose()
+
+        jxjt = np.matmul(jacobian, jacobian_transpose)
+
+        i = np.array([[self.damping_coefficient, 0, 0, 0, 0, 0],
+                      [0, self.damping_coefficient, 0, 0, 0, 0],
+                      [0, 0, self.damping_coefficient, 0, 0, 0],
+                      [0, 0, 0, self.damping_coefficient/50, 0, 0],
+                      [0, 0, 0, 0, self.damping_coefficient/50, 0],
+                      [0, 0, 0, 0, 0, self.damping_coefficient/50]])
+
+        n = np.matmul(np.linalg.inv(jxjt + i), error_with_pose)
+        delta_theta = np.matmul(jacobian_transpose, n)
 
         for update_i in range(0, len(self.link_list)):
             self.link_list[update_i].update_delta(delta_theta[update_i])
@@ -212,18 +216,10 @@ class Armature:
         for link in self.link_list:
             link.theta = 0
 
-        # run kinematics algorithm to convergence threshold
         while arm.ee_jacobian(1) == 1:
             arm.main_update()
-            arm.plot_arm()
-
-        while arm.ee_jacobian(1) == 1:
-            arm.main_update()
-            arm.plot_arm()
-        # take time and const value
-        # print(self.convergence_time)
-        # print(self.damping_coefficient)
-        # write to csv?
+            self.desiredxyzijk += Matrix([0, 0, 0, 0, 0, 0])
+        arm.plot_arm()
 
 
 fig = plt.figure(1)
@@ -247,24 +243,9 @@ arm.main_update()
 xs = []
 ys = []
 zs = []
-for i in range(100, 2205):
-    for j in range(0, 10):
-        x = 175 + random.randrange(0, 20, 1)
-        y = 175 + random.randrange(0, 20, 1)
-        z = 174 + random.randrange(0, 20, 1)
-        x_rot = pi / 4
-        y_rot = pi / 4
-        z_rot = 0
-        arm.run_kinematics(i, x, y, z, x_rot, y_rot, z_rot)
-        runtime = arm.convergence_time
-        xs.append(i)
-        ys.append(runtime)
-        zs.append(j)
-        fig2 = plt.figure(2)
-        ax2 = fig2.add_subplot(111, projection='3d')
-        ax2.set_ylim(0, 10)
-        ax2.set_xlim(0, 360)
-        ax2.scatter(xs, ys, zs)
-        plt.draw()
 
+x_rot = pi
+y_rot = 0
+z_rot = pi / 2
+arm.run_kinematics(100, 400, 100, 100, x_rot, y_rot, z_rot)
 plt.show()
