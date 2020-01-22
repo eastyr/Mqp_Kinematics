@@ -160,40 +160,26 @@ class Armature:
         self.forward_kinematics()
         self.update_theta_list()
         error_with_pose = self.desiredxyzijk - self.transform_list[-1].solve_transform(self.paired_theta)
+        error = error_with_pose[0:3]
         error_norm = error_with_pose.norm()
         full_norm = self.desiredxyzijk.norm()
 
-        for i in range(3, 6):
-            if error_with_pose[i] > pi:
-                error_with_pose[i] = 2*pi - error_with_pose[i]
-        if error_with_pose.norm() < 1:
-            self.damping_coefficient *= 1.5
-        if error_with_pose.norm() < .2:
-            return 0
-       # self.damping_coefficient = min(1000, int(self.damping_coefficient * full_norm/(error_norm+5)))
-        print(error_with_pose)
-        print(error_with_pose.norm())
-        error_with_pose = np.array(error_with_pose).astype(np.float64)
+        error = np.array(error).astype(np.float64)
 
         transform_matrix = self.transform_list[-1].transform_to_me[0:3, 3]
         jacobian = transform_matrix.jacobian(self.sym_theta_list)
-        for jac_i in range(0, 3):
-            jacobian = jacobian.row_insert(10, self.z_jacob[jac_i, :])
 
         jacobian = jacobian.xreplace(self.paired_theta)
         jacobian = np.array(jacobian).astype(np.float64)
         jacobian_transpose = jacobian.transpose()
-
         jxjt = np.matmul(jacobian, jacobian_transpose)
 
-        i = np.array([[self.damping_coefficient, 0, 0, 0, 0, 0],
-                      [0, self.damping_coefficient, 0, 0, 0, 0],
-                      [0, 0, self.damping_coefficient, 0, 0, 0],
-                      [0, 0, 0, self.damping_coefficient/50, 0, 0],
-                      [0, 0, 0, 0, self.damping_coefficient/50, 0],
-                      [0, 0, 0, 0, 0, self.damping_coefficient/50]])
+        i = np.array([[self.damping_coefficient, 0, 0],
+                      [0, self.damping_coefficient, 0],
+                      [0, 0, self.damping_coefficient]])
 
-        n = np.matmul(np.linalg.inv(jxjt + i), error_with_pose)
+
+        n = np.matmul(np.linalg.inv(jxjt + i), error)
         delta_theta = np.matmul(jacobian_transpose, n)
 
         for update_i in range(0, len(self.link_list)):
@@ -233,10 +219,7 @@ arm.add_link((sym_theta_list[1], pi / 2, 100, 0))
 arm.add_link((sym_theta_list[2], pi / 2, 100, 0))
 arm.add_link((sym_theta_list[3], -pi / 2, 100, 0))
 arm.add_link((sym_theta_list[4], -pi / 2, 100, 0))
-arm.add_link((sym_theta_list[5], pi / 2, 100, 0))
-arm.add_link((sym_theta_list[6], 0, 100, 0))
-arm.add_link((pi / 2, pi / 2, 0, 0))
-arm.add_link((sym_theta_list[7], pi / 2, 0, 0))
+
 
 arm.main_update()
 # arm.plot_arm()
@@ -247,5 +230,5 @@ zs = []
 x_rot = pi
 y_rot = 0
 z_rot = pi / 2
-arm.run_kinematics(100, 400, 100, 100, x_rot, y_rot, z_rot)
+arm.run_kinematics(150, 300, 100, 100, x_rot, y_rot, z_rot)
 plt.show()
