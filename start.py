@@ -219,7 +219,7 @@ class Armature:
         while arm.ee_jacobian(1) == 1:
             arm.main_update()
             self.desiredxyzijk += Matrix([0, 0, 0, 0, 0, 0])
-        arm.plot_arm()
+            arm.plot_arm()
 
 
 fig = plt.figure(1)
